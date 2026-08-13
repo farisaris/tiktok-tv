@@ -26,10 +26,15 @@ public class MainActivity extends AppCompatActivity {
     private static final String START_URL = "https://www.tiktok.com/login";
     private static final int CURSOR_SIZE_DP = 28;
     private static final int STEP_DP = 40;
+    private static final int LONG_PRESS_MS = 450;
 
     private boolean cursorMode = false;
     private float cursorX, cursorY;
     private float density;
+
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private Runnable longPressRunnable;
+    private boolean longPressFired = false;
 
     private static final String NAV_JS =
         "(function(){" +
@@ -106,7 +111,7 @@ public class MainActivity extends AppCompatActivity {
     private void toggleCursorMode() {
         cursorMode = !cursorMode;
         cursor.setVisibility(cursorMode ? android.view.View.VISIBLE : android.view.View.GONE);
-        if (cursorMode && cursorX == 0 && cursorY == 0) {
+        if (cursorX == 0 && cursorY == 0) {
             cursorX = root.getWidth() / 2f;
             cursorY = root.getHeight() / 2f;
         }
@@ -120,7 +125,7 @@ public class MainActivity extends AppCompatActivity {
         webView.dispatchTouchEvent(down);
         down.recycle();
 
-        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+        handler.postDelayed(() -> {
             long upTime = SystemClock.uptimeMillis();
             MotionEvent up = MotionEvent.obtain(downTime, upTime,
                     MotionEvent.ACTION_UP, cursorX, cursorY, 0);
@@ -130,16 +135,47 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
-    public boolean onKeyLongPress(int keyCode, KeyEvent event) {
-        if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
-            toggleCursorMode();
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        boolean isCenter = event.getKeyCode() == KeyEvent.KEYCODE_DPAD_CENTER
+                || event.getKeyCode() == KeyEvent.KEYCODE_ENTER;
+
+        if (isCenter) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                if (event.getRepeatCount() == 0) {
+                    longPressFired = false;
+                    longPressRunnable = () -> {
+                        longPressFired = true;
+                        toggleCursorMode();
+                    };
+                    handler.postDelayed(longPressRunnable, LONG_PRESS_MS);
+                }
+                return true;
+            } else if (event.getAction() == KeyEvent.ACTION_UP) {
+                if (longPressRunnable != null) {
+                    handler.removeCallbacks(longPressRunnable);
+                }
+                if (!longPressFired) {
+                    if (cursorMode) {
+                        dispatchTapAtCursor();
+                    } else {
+                        webView.evaluateJavascript("window.__tvClick && window.__tvClick();", null);
+                    }
+                }
+                return true;
+            }
             return true;
         }
-        return super.onKeyLongPress(keyCode, event);
+
+        if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
+            if (handleDirectionalOrBack(event.getKeyCode())) {
+                return true;
+            }
+        }
+
+        return super.dispatchKeyEvent(event);
     }
 
-    @Override
-    public boolean onKeyDown(int keyCode, KeyEvent event) {
+    private boolean handleDirectionalOrBack(int keyCode) {
         if (cursorMode) {
             float step = STEP_DP * density;
             switch (keyCode) {
@@ -159,64 +195,37 @@ public class MainActivity extends AppCompatActivity {
                     cursorY = Math.min(root.getHeight(), cursorY + step);
                     updateCursorPosition();
                     return true;
-                case KeyEvent.KEYCODE_DPAD_CENTER:
-                case KeyEvent.KEYCODE_ENTER:
-                    if (event.getRepeatCount() == 0) {
-                        dispatchTapAtCursor();
-                    }
-                    return true;
                 case KeyEvent.KEYCODE_BACK:
                     toggleCursorMode();
                     return true;
                 default:
-                    return super.onKeyDown(keyCode, event);
+                    return false;
             }
         }
 
-        String js = null;
         switch (keyCode) {
             case KeyEvent.KEYCODE_DPAD_LEFT:
-                js = "window.__tvMove && window.__tvMove('left');";
-                break;
+                webView.evaluateJavascript("window.__tvMove && window.__tvMove('left');", null);
+                return true;
             case KeyEvent.KEYCODE_DPAD_RIGHT:
-                js = "window.__tvMove && window.__tvMove('right');";
-                break;
+                webView.evaluateJavascript("window.__tvMove && window.__tvMove('right');", null);
+                return true;
             case KeyEvent.KEYCODE_DPAD_UP:
-                js = "window.__tvScroll ? window.__tvScroll(-300) : window.scrollBy(0,-300);";
-                break;
+                webView.evaluateJavascript(
+                        "window.__tvScroll ? window.__tvScroll(-300) : window.scrollBy(0,-300);", null);
+                return true;
             case KeyEvent.KEYCODE_DPAD_DOWN:
-                js = "window.__tvScroll ? window.__tvScroll(300) : window.scrollBy(0,300);";
-                break;
-            case KeyEvent.KEYCODE_DPAD_CENTER:
-            case KeyEvent.KEYCODE_ENTER:
-                js = "window.__tvClick && window.__tvClick();";
-                break;
+                webView.evaluateJavascript(
+                        "window.__tvScroll ? window.__tvScroll(300) : window.scrollBy(0,300);", null);
+                return true;
             case KeyEvent.KEYCODE_BACK:
                 if (webView.canGoBack()) {
                     webView.goBack();
                     return true;
                 }
-                break;
+                return false;
             default:
-                break;
-        }
-        if (js != null) {
-            webView.evaluateJavascript(js, null);
-            return true;
-        }
-        return super.onKeyDown(keyCode, event);
-    }
-
-    @Override
-    public void onBackPressed() {
-        if (cursorMode) {
-            toggleCursorMode();
-            return;
-        }
-        if (webView.canGoBack()) {
-            webView.goBack();
-        } else {
-            super.onBackPressed();
+                return false;
         }
     }
 }
