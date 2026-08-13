@@ -88,6 +88,17 @@ public class MainActivity extends AppCompatActivity {
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
+            public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                if (url != null && (url.startsWith("http://") || url.startsWith("https://"))) {
+                    return false; // biar WebView load macam biasa
+                }
+                // Scheme bukan http/https (contoh: snssdk1180://) - abaikan,
+                // supaya app tak "terkeluar" ke error page bila cuba buka
+                // TikTok app asli.
+                return true;
+            }
+
+            @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
                 view.evaluateJavascript(NAV_JS, null);
