@@ -27,6 +27,8 @@ public class MainActivity extends AppCompatActivity {
     private static final int CURSOR_SIZE_DP = 28;
     private static final int STEP_DP = 40;
     private static final int LONG_PRESS_MS = 450;
+    private static final int SWIPE_DURATION_MS = 260;
+    private static final int SWIPE_STEPS = 12;
 
     private boolean cursorMode = false;
     private float cursorX, cursorY;
@@ -49,7 +51,6 @@ public class MainActivity extends AppCompatActivity {
         "function setFocus(i){clearFocus(); if(els.length===0)return; idx=((i%els.length)+els.length)%els.length; var el=els[idx]; el.classList.add('__tv_focus'); el.scrollIntoView({block:'center',inline:'center',behavior:'smooth'});}" +
         "window.__tvMove=function(dir){collect(); if(els.length===0)return; if(idx===-1){setFocus(0);return;} var cur=els[idx]?els[idx].getBoundingClientRect():{left:0,top:0}; var best=-1,bestDist=Infinity; for(var i=0;i<els.length;i++){if(i===idx)continue; var r=els[i].getBoundingClientRect(); var dx=r.left-cur.left,dy=r.top-cur.top; var ok=false; if(dir==='left')ok=dx<-5; if(dir==='right')ok=dx>5; if(dir==='up')ok=dy<-5; if(dir==='down')ok=dy>5; if(!ok)continue; var dist=Math.sqrt(dx*dx+dy*dy); if(dist<bestDist){bestDist=dist; best=i;}} if(best>=0)setFocus(best); else setFocus(idx);};" +
         "window.__tvClick=function(){if(idx>=0&&els[idx]){els[idx].click();}};" +
-        "window.__tvScroll=function(dy){window.scrollBy({top:dy,behavior:'smooth'});};" +
         "})();";
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -90,11 +91,8 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
                 if (url != null && (url.startsWith("http://") || url.startsWith("https://"))) {
-                    return false; // biar WebView load macam biasa
+                    return false;
                 }
-                // Scheme bukan http/https (contoh: snssdk1180://) - abaikan,
-                // supaya app tak "terkeluar" ke error page bila cuba buka
-                // TikTok app asli.
                 return true;
             }
 
@@ -143,6 +141,47 @@ public class MainActivity extends AppCompatActivity {
             webView.dispatchTouchEvent(up);
             up.recycle();
         }, 60);
+    }
+
+    // Simulates a real finger swipe (down -> move -> up) so TikTok's
+    // snap-scrolling feed responds the same way it would to a touch swipe.
+    // swipeFingerUp = true means the finger moves UP the screen (which is
+    // what "next video" normally is on TikTok).
+    private void simulateSwipe(boolean swipeFingerUp) {
+        final int width = root.getWidth();
+        final int height = root.getHeight();
+        if (width == 0 || height == 0) return;
+
+        final float startX = width / 2f;
+        final float startY = swipeFingerUp ? height * 0.75f : height * 0.25f;
+        final float endY = swipeFingerUp ? height * 0.15f : height * 0.85f;
+        final long downTime = SystemClock.uptimeMillis();
+
+        MotionEvent down = MotionEvent.obtain(downTime, downTime,
+                MotionEvent.ACTION_DOWN, startX, startY, 0);
+        webView.dispatchTouchEvent(down);
+        down.recycle();
+
+        for (int i = 1; i <= SWIPE_STEPS; i++) {
+            final int step = i;
+            long delay = (SWIPE_DURATION_MS * step) / SWIPE_STEPS;
+            handler.postDelayed(() -> {
+                float progress = step / (float) SWIPE_STEPS;
+                float y = startY + (endY - startY) * progress;
+                long eventTime = SystemClock.uptimeMillis();
+                if (step < SWIPE_STEPS) {
+                    MotionEvent move = MotionEvent.obtain(downTime, eventTime,
+                            MotionEvent.ACTION_MOVE, startX, y, 0);
+                    webView.dispatchTouchEvent(move);
+                    move.recycle();
+                } else {
+                    MotionEvent up = MotionEvent.obtain(downTime, eventTime,
+                            MotionEvent.ACTION_UP, startX, y, 0);
+                    webView.dispatchTouchEvent(up);
+                    up.recycle();
+                }
+            }, delay);
+        }
     }
 
     @Override
@@ -222,12 +261,10 @@ public class MainActivity extends AppCompatActivity {
                 webView.evaluateJavascript("window.__tvMove && window.__tvMove('right');", null);
                 return true;
             case KeyEvent.KEYCODE_DPAD_UP:
-                webView.evaluateJavascript(
-                        "window.__tvScroll ? window.__tvScroll(-300) : window.scrollBy(0,-300);", null);
+                simulateSwipe(false); // finger turun -> video sebelum
                 return true;
             case KeyEvent.KEYCODE_DPAD_DOWN:
-                webView.evaluateJavascript(
-                        "window.__tvScroll ? window.__tvScroll(300) : window.scrollBy(0,300);", null);
+                simulateSwipe(true); // finger naik -> video seterusnya
                 return true;
             case KeyEvent.KEYCODE_BACK:
                 if (webView.canGoBack()) {
