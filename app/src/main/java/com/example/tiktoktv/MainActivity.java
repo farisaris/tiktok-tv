@@ -78,19 +78,31 @@ public class MainActivity extends AppCompatActivity {
         "  }" +
         "}" +
         "function fixVideoSize(){" +
-        "  var h=window.innerHeight;" +
+        "  var h=window.innerHeight, w=window.innerWidth;" +
         "  var vids=document.querySelectorAll('video');" +
         "  for(var i=0;i<vids.length;i++){" +
         "    var v=vids[i];" +
-        "    v.style.setProperty('max-height',h+'px','important');" +
+        "    v.style.setProperty('position','relative','important');" +
+        "    v.style.setProperty('transform','none','important');" +
+        "    v.style.setProperty('inset','auto','important');" +
+        "    v.style.setProperty('left','auto','important');" +
+        "    v.style.setProperty('top','auto','important');" +
+        "    v.style.setProperty('width','auto','important');" +
         "    v.style.setProperty('height','auto','important');" +
+        "    v.style.setProperty('max-width','100%','important');" +
+        "    v.style.setProperty('max-height',h+'px','important');" +
         "    v.style.setProperty('object-fit','contain','important');" +
+        "    v.style.setProperty('object-position','center','important');" +
         "    var p=v.parentElement, depth=0;" +
-        "    while(p && depth<6){" +
-        "      var r=p.getBoundingClientRect();" +
-        "      if(r.height>h+2){" +
-        "        p.style.setProperty('max-height',h+'px','important');" +
-        "        p.style.setProperty('overflow','hidden','important');" +
+        "    while(p && depth<8){" +
+        "      var cs=window.getComputedStyle(p);" +
+        "      if(cs.overflow==='hidden'||cs.overflowX==='hidden'){" +
+        "        p.style.setProperty('overflow','visible','important');" +
+        "      }" +
+        "      var pw=parseFloat(cs.width);" +
+        "      if(pw && pw<w-2){" +
+        "        p.style.setProperty('width','100%','important');" +
+        "        p.style.setProperty('max-width','100%','important');" +
         "      }" +
         "      p=p.parentElement; depth++;" +
         "    }" +
