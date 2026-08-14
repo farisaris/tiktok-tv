@@ -79,19 +79,25 @@ public class MainActivity extends AppCompatActivity {
         "}" +
         "function fixVideoSize(){" +
         "  var h=window.innerHeight;" +
+        "  var currentScale=window.__tvScale||1;" +
         "  var vids=document.querySelectorAll('video');" +
         "  var maxH=0;" +
         "  for(var i=0;i<vids.length;i++){" +
         "    var r=vids[i].getBoundingClientRect();" +
         "    if(r.height>maxH) maxH=r.height;" +
         "  }" +
-        "  if(maxH>h+4){" +
-        "    var ratio=h/maxH;" +
-        "    var current=parseFloat(document.documentElement.style.zoom)||1;" +
-        "    var target=current*ratio;" +
-        "    if(target>0.5 && target<1){" +
-        "      document.documentElement.style.setProperty('zoom', target.toString());" +
-        "    }" +
+        "  if(maxH<10) return;" +
+        "  var naturalH=maxH/currentScale;" +
+        "  var target=h/naturalH;" +
+        "  if(target>1) target=1;" +
+        "  if(target<0.4) target=0.4;" +
+        "  if(Math.abs(target-currentScale)>0.01){" +
+        "    window.__tvScale=target;" +
+        "    document.body.style.setProperty('transform','scale('+target+')','important');" +
+        "    document.body.style.setProperty('transform-origin','top left','important');" +
+        "    document.body.style.setProperty('width',(100/target)+'%','important');" +
+        "    document.body.style.setProperty('height',(100/target)+'%','important');" +
+        "    document.documentElement.style.setProperty('overflow','hidden','important');" +
         "  }" +
         "}" +
         "hideAppBanners(); fixVideoSize();" +
